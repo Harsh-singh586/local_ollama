@@ -1,0 +1,4 @@
+flask
+chromadb
+requests
+PyPDF2
