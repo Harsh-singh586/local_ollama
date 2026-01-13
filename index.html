@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local PDF RAG - Q&A</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 14px;
+            resize: vertical;
+            min-height: 80px;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-size: 14px;
+            align-self: flex-end;
+            height: fit-content;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .answer-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .answer-box {
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            padding: 15px;
+            min-height: 100px;
+            color: #333;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .answer-box.empty {
+            color: #999;
+            font-style: italic;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #667eea;
+            margin-top: 10px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e0e0e0;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #e74c3c;
+            font-size: 13px;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .error.active {
+            display: block;
+        }
+
+        .success {
+            color: #27ae60;
+            font-size: 13px;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .success.active {
+            display: block;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .input-group {
+                flex-direction: column;
+            }
+
+            button {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 PDF RAG Q&A</h1>
+        <p class="subtitle">Ask questions about your uploaded documents</p>
+
+        <form id="qaForm">
+            <div class="form-group">
+                <label for="question">Your Question:</label>
+                <div class="input-group">
+                    <textarea 
+                        id="question" 
+                        placeholder="Ask a question about the documents..."
+                        required
+                    ></textarea>
+                    <button type="submit" id="askBtn">Ask</button>
+                </div>
+                <div class="error" id="questionError"></div>
+            </div>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Searching documents and generating answer...</p>
+        </div>
+
+        <div class="answer-section">
+            <label for="answer">Answer:</label>
+            <div class="answer-box empty" id="answer">
+                Answers will appear here...
+            </div>
+            <div class="error" id="answerError"></div>
+            <div class="success" id="successMsg"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:5001';
+
+        const form = document.getElementById('qaForm');
+        const questionInput = document.getElementById('question');
+        const answerBox = document.getElementById('answer');
+        const loadingSpinner = document.getElementById('loading');
+        const questionError = document.getElementById('questionError');
+        const answerError = document.getElementById('answerError');
+        const successMsg = document.getElementById('successMsg');
+        const askBtn = document.getElementById('askBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const question = questionInput.value.trim();
+
+            if (!question) {
+                showError('Please enter a question', 'question');
+                return;
+            }
+
+            // Clear previous messages
+            clearMessages();
+
+            // Show loading state
+            loadingSpinner.classList.add('active');
+            askBtn.disabled = true;
+
+            try {
+                const response = await fetch(`${API_URL}/ask`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question: question
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                // Display answer
+                if (data.answer) {
+                    answerBox.textContent = data.answer;
+                    answerBox.classList.remove('empty');
+                    showSuccess('Answer generated successfully!');
+                } else {
+                    showError('No answer received from the API', 'answer');
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                showError(`Error: ${error.message}`, 'answer');
+                
+                // Check if server is running
+                if (error.message.includes('Failed to fetch')) {
+                    showError('Cannot connect to API. Make sure the server is running on http://localhost:5001', 'answer');
+                }
+            } finally {
+                loadingSpinner.classList.remove('active');
+                askBtn.disabled = false;
+            }
+        });
+
+        function showError(message, target) {
+            const errorElement = target === 'question' ? questionError : answerError;
+            errorElement.textContent = message;
+            errorElement.classList.add('active');
+        }
+
+        function showSuccess(message) {
+            successMsg.textContent = message;
+            successMsg.classList.add('active');
+            setTimeout(() => {
+                successMsg.classList.remove('active');
+            }, 3000);
+        }
+
+        function clearMessages() {
+            questionError.classList.remove('active');
+            answerError.classList.remove('active');
+            successMsg.classList.remove('active');
+        }
+
+        // Clear question error when user starts typing
+        questionInput.addEventListener('input', () => {
+            questionError.classList.remove('active');
+        });
+    </script>
+</body>
+</html>

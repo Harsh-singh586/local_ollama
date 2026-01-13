@@ -1,6 +1,7 @@
 
 import os
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import uuid
 import chromadb
 import requests
@@ -8,11 +9,13 @@ from utils import extract_text_from_pdf, chunk_text, embed_text
 
 
 app = Flask(__name__)
+CORS(app)
 
 chroma_client = chromadb.PersistentClient(path="db")
 collection = chroma_client.get_or_create_collection(name="documents")
 
 OLLAMA_EMBED_URL = "http://localhost:11434/api/embeddings"
+
 OLLAMA_CHAT_URL = "http://localhost:11434/api/generate"
 
 
@@ -90,11 +93,6 @@ def ask_question():
     return jsonify({
         "answer": answer
     })
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return {"message": "Local PDF RAG API running!"}
 
 
 if __name__ == "__main__":
