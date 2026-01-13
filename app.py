@@ -56,10 +56,10 @@ def upload_document():
 
     # Extract text
     text = extract_text_from_pdf(file_path)
-    print(text)
 
     # Chunk text
     chunks = chunk_text(text)
+    print('chinks created:', chunks)
 
     # Embed and store in ChromaDB
     for chunk in chunks:

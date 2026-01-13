@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local PDF RAG - Q&A</title>
+    <title>Local PDF RAG - Document Manager & Q&A</title>
     <style>
         * {
             margin: 0;
@@ -26,7 +26,7 @@
             border-radius: 10px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
             padding: 40px;
-            max-width: 600px;
+            max-width: 700px;
             width: 100%;
         }
 
@@ -41,6 +41,42 @@
             text-align: center;
             margin-bottom: 30px;
             font-size: 14px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab-btn.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-btn:hover {
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .form-group {
@@ -58,6 +94,46 @@
         .input-group {
             display: flex;
             gap: 10px;
+        }
+
+        .file-upload-area {
+            border: 2px dashed #667eea;
+            border-radius: 5px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #f8f9ff;
+        }
+
+        .file-upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .file-upload-area.dragover {
+            border-color: #764ba2;
+            background: #e8ebff;
+        }
+
+        .file-upload-area input[type="file"] {
+            display: none;
+        }
+
+        .upload-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #667eea;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .upload-subtext {
+            color: #999;
+            font-size: 12px;
         }
 
         textarea {
@@ -201,66 +277,187 @@
 </head>
 <body>
     <div class="container">
-        <h1>🤖 PDF RAG Q&A</h1>
-        <p class="subtitle">Ask questions about your uploaded documents</p>
+        <h1>🤖 PDF RAG Manager</h1>
+        <p class="subtitle">Upload documents and ask questions</p>
 
-        <form id="qaForm">
-            <div class="form-group">
-                <label for="question">Your Question:</label>
-                <div class="input-group">
-                    <textarea 
-                        id="question" 
-                        placeholder="Ask a question about the documents..."
-                        required
-                    ></textarea>
-                    <button type="submit" id="askBtn">Ask</button>
-                </div>
-                <div class="error" id="questionError"></div>
-            </div>
-        </form>
-
-        <div class="loading" id="loading">
-            <div class="spinner"></div>
-            <p>Searching documents and generating answer...</p>
+        <!-- Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="upload">📤 Upload Document</button>
+            <button class="tab-btn" data-tab="qa">❓ Ask Questions</button>
         </div>
 
-        <div class="answer-section">
-            <label for="answer">Answer:</label>
-            <div class="answer-box empty" id="answer">
-                Answers will appear here...
+        <!-- Upload Tab -->
+        <div class="tab-content active" id="upload-tab">
+            <div class="form-group">
+                <label>Select PDF Document:</label>
+                <div class="file-upload-area" id="uploadArea">
+                    <div class="upload-icon">📄</div>
+                    <div class="upload-text">Click to upload or drag and drop</div>
+                    <div class="upload-subtext">PDF files only</div>
+                    <input type="file" id="fileInput" accept=".pdf" />
+                </div>
+                <div class="error" id="uploadError"></div>
+                <div class="success" id="uploadSuccess"></div>
             </div>
-            <div class="error" id="answerError"></div>
-            <div class="success" id="successMsg"></div>
+
+            <div class="loading" id="uploadLoading">
+                <div class="spinner"></div>
+                <p>Uploading and indexing document...</p>
+            </div>
+        </div>
+
+        <!-- Q&A Tab -->
+        <div class="tab-content" id="qa-tab">
+            <form id="qaForm">
+                <div class="form-group">
+                    <label for="question">Your Question:</label>
+                    <div class="input-group">
+                        <textarea 
+                            id="question" 
+                            placeholder="Ask a question about the documents..."
+                            required
+                        ></textarea>
+                        <button type="submit" id="askBtn">Ask</button>
+                    </div>
+                    <div class="error" id="questionError"></div>
+                </div>
+            </form>
+
+            <div class="loading" id="qaLoading">
+                <div class="spinner"></div>
+                <p>Searching documents and generating answer...</p>
+            </div>
+
+            <div class="answer-section">
+                <label for="answer">Answer:</label>
+                <div class="answer-box empty" id="answer">
+                    Answers will appear here...
+                </div>
+                <div class="error" id="answerError"></div>
+                <div class="success" id="qaSuccess"></div>
+            </div>
         </div>
     </div>
 
     <script>
         const API_URL = 'http://localhost:5001';
 
-        const form = document.getElementById('qaForm');
+        // Tab switching
+        const tabButtons = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                const tabName = button.dataset.tab;
+                
+                // Remove active class from all buttons and contents
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                tabContents.forEach(content => content.classList.remove('active'));
+                
+                // Add active class to clicked button and corresponding content
+                button.classList.add('active');
+                document.getElementById(`${tabName}-tab`).classList.add('active');
+            });
+        });
+
+        // Upload functionality
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const uploadError = document.getElementById('uploadError');
+        const uploadSuccess = document.getElementById('uploadSuccess');
+        const uploadLoading = document.getElementById('uploadLoading');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileUpload(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileUpload(e.target.files[0]);
+            }
+        });
+
+        async function handleFileUpload(file) {
+            if (!file.type.includes('pdf')) {
+                showUploadError('Please upload a PDF file');
+                return;
+            }
+
+            clearUploadMessages();
+            uploadLoading.classList.add('active');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch(`${API_URL}/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                showUploadSuccess(`✓ Document "${file.name}" uploaded and indexed successfully!`);
+                fileInput.value = '';
+
+            } catch (error) {
+                console.error('Error:', error);
+                showUploadError(`Error uploading file: ${error.message}`);
+                
+                if (error.message.includes('Failed to fetch')) {
+                    showUploadError('Cannot connect to API. Make sure the server is running on http://localhost:5001');
+                }
+            } finally {
+                uploadLoading.classList.remove('active');
+            }
+        }
+
+        // Q&A functionality
+        const qaForm = document.getElementById('qaForm');
         const questionInput = document.getElementById('question');
         const answerBox = document.getElementById('answer');
-        const loadingSpinner = document.getElementById('loading');
+        const qaLoading = document.getElementById('qaLoading');
         const questionError = document.getElementById('questionError');
         const answerError = document.getElementById('answerError');
-        const successMsg = document.getElementById('successMsg');
+        const qaSuccess = document.getElementById('qaSuccess');
         const askBtn = document.getElementById('askBtn');
 
-        form.addEventListener('submit', async (e) => {
+        qaForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
             const question = questionInput.value.trim();
 
             if (!question) {
-                showError('Please enter a question', 'question');
+                showQAError('Please enter a question', 'question');
                 return;
             }
 
             // Clear previous messages
-            clearMessages();
+            clearQAMessages();
 
             // Show loading state
-            loadingSpinner.classList.add('active');
+            qaLoading.classList.add('active');
             askBtn.disabled = true;
 
             try {
@@ -284,43 +481,63 @@
                 if (data.answer) {
                     answerBox.textContent = data.answer;
                     answerBox.classList.remove('empty');
-                    showSuccess('Answer generated successfully!');
+                    showQASuccess('Answer generated successfully!');
                 } else {
-                    showError('No answer received from the API', 'answer');
+                    showQAError('No answer received from the API', 'answer');
                 }
 
             } catch (error) {
                 console.error('Error:', error);
-                showError(`Error: ${error.message}`, 'answer');
+                showQAError(`Error: ${error.message}`, 'answer');
                 
                 // Check if server is running
                 if (error.message.includes('Failed to fetch')) {
-                    showError('Cannot connect to API. Make sure the server is running on http://localhost:5001', 'answer');
+                    showQAError('Cannot connect to API. Make sure the server is running on http://localhost:5001', 'answer');
                 }
             } finally {
-                loadingSpinner.classList.remove('active');
+                qaLoading.classList.remove('active');
                 askBtn.disabled = false;
             }
         });
 
-        function showError(message, target) {
+        // Upload helper functions
+        function showUploadError(message) {
+            uploadError.textContent = message;
+            uploadError.classList.add('active');
+        }
+
+        function showUploadSuccess(message) {
+            uploadSuccess.textContent = message;
+            uploadSuccess.classList.add('active');
+            setTimeout(() => {
+                uploadSuccess.classList.remove('active');
+            }, 3000);
+        }
+
+        function clearUploadMessages() {
+            uploadError.classList.remove('active');
+            uploadSuccess.classList.remove('active');
+        }
+
+        // Q&A helper functions
+        function showQAError(message, target) {
             const errorElement = target === 'question' ? questionError : answerError;
             errorElement.textContent = message;
             errorElement.classList.add('active');
         }
 
-        function showSuccess(message) {
-            successMsg.textContent = message;
-            successMsg.classList.add('active');
+        function showQASuccess(message) {
+            qaSuccess.textContent = message;
+            qaSuccess.classList.add('active');
             setTimeout(() => {
-                successMsg.classList.remove('active');
+                qaSuccess.classList.remove('active');
             }, 3000);
         }
 
-        function clearMessages() {
+        function clearQAMessages() {
             questionError.classList.remove('active');
             answerError.classList.remove('active');
-            successMsg.classList.remove('active');
+            qaSuccess.classList.remove('active');
         }
 
         // Clear question error when user starts typing
